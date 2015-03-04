@@ -9,8 +9,8 @@ use_ok 'Data::ICal::RDF';
 
 # that it behaves properly when reading a bunk Data::ICal object
 
-# that it behaves properly when reading bunk-yet-valid data within the
-# Data::ICal object
+# that it behaves properly when reading bunk-yet-syntactically-valid
+# data within the Data::ICal object
 
 # that it behaves properly when executing resolve_uid
 
@@ -18,4 +18,4 @@ use_ok 'Data::ICal::RDF';
 
 # that it properly inserts all the relevant content into the model
 
-# LOL that's gonna happen later folks
+# LOL that's all gonna happen later folks

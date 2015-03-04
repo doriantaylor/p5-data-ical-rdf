@@ -14,3 +14,4 @@ pod2htm*.tmp
 Data-ICal-RDF-*
 inc/*
 *META*
+MANIFEST.bak

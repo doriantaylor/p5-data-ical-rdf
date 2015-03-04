@@ -20,7 +20,8 @@ use Path::Class;
 use RDF::Trine qw(statement iri literal);
 use UUID::Tiny qw(UUID_V4);
 use Scalar::Util ();
-use Carp         ();
+
+with 'Throwable';
 
 # built-in ref types for our robust type checker
 my %CORE = map { $_ => 1 } qw(SCALAR ARRAY HASH CODE REF GLOB LVALUE
@@ -51,8 +52,6 @@ sub _uuid () {
 sub _uuid_urn () {
     'urn:uuid:' . _uuid;
 }
-
-with 'Throwable';
 
 =head1 NAME
 
@@ -200,16 +199,25 @@ my %VALS = (
         # too bad there isn't a standardized parameter for file names
         my $name = $param->{'X-FILENAME'} || $param->{'X-APPLE-FILENAME'};
 
-        # scrub the filename of any naughty path info
-        $name = Path::Class::File->new($name)->basename
-            if defined $name and $name ne '';
+        # this is where the securi-tah happens, folks.
+        if (defined $name) {
+            # remove any space padding
+            $name =~ s/^\s*(.*?)\s*$/$1/;
+            # scrub the filename of any naughty path info
+            $name = Path::Class::File->new($name)->basename if $name ne '';
+
+            # kill the name if all that's left is an empty string
+            undef $name if $name eq '';
+        }
 
         # turn the val into an IO object
         $val = IO::Scalar->new(\$val);
 
         # now try to resolve the attachment
         my $o = eval { $self->resolve_binary->($self, $val, $type, $name) };
-        Carp::croak("resolve_binary callback failed: $@") if $@;
+        $self->throw("resolve_binary callback failed: $@") if $@;
+        $self->throw('resolve_binary callback returned an invalid value')
+              unless _is_really($o, 'RDF::Trine::Node');
 
         my $p = $self->_predicate_for($prop);
         $self->model->add_statement(statement($s, $p, $o));
@@ -452,7 +460,7 @@ This parameter is I<required>.
 
 has resolve_uid => (
     is => 'ro',
-    isa => sub { Carp::croak('resolve_uid must be a CODE reference')
+    isa => sub { die 'resolve_uid must be a CODE reference'
           unless _is_really($_[0], 'CODE') },
     required => 1,
 );
@@ -532,7 +540,7 @@ This parameter is I<required>.
 
 has resolve_binary => (
     is  => 'ro',
-    isa => sub { Carp::croak('resolve_binary must be a CODE reference')
+    isa => sub { die 'resolve_binary must be a CODE reference'
           unless _is_really($_[0], 'CODE') },
     required => 1,
 );
@@ -567,8 +575,8 @@ This parameter is I<optional>.
 
 has tz => (
     is      => 'ro',
-    isa     => sub { Carp::croak
-          ('tz must be a HASH of DateTime::TimeZone objects')
+    isa     => sub { die
+          'tz must be a HASH of DateTime::TimeZone objects'
               unless _is_really($_[0], 'HASH')
                   and values %{$_[0]} == grep {
                       _is_really($_, 'DateTime::TimeZone') } values %{$_[0]} },
@@ -646,7 +654,7 @@ sub process_events {
 
         # fetch the appropriate subject UUID for the ical uid
         my $s = eval { $self->subject_for($uid->value) };
-        Carp::croak($@) if $@;
+        $self->throw($@) if $@;
 
         # don't forget to add the type
         $self->model->add_statement
@@ -710,10 +718,10 @@ sub subject_for {
 
     # call out to the callback
     if (my $s = eval { $self->resolve_uid->($self, $uid) }) {
-        Carp::croak("resolve_uid callback failed: $@") if $@;
-        Carp::croak('resolve_uid callback returned an invalid value')
+        $self->throw("resolve_uid callback failed: $@") if $@;
+        $self->throw('resolve_uid callback returned an invalid value')
               unless _is_really($s, 'RDF::Trine::Node');
-        Carp::croak("Node $s returned from resolve_uid callback" .
+        $self->throw("Node $s returned from resolve_uid callback" .
                         ' is not suitable as a subject')
               unless ($s->is_resource or $s->is_blank);
 
@@ -730,6 +738,42 @@ sub subject_for {
 =head2 model
 
 Retrieve the L<RDF::Trine::Model> object embedded in the processor.
+
+=head1 CAVEATS
+
+A number of iCal datatype handlers are not implemented in this early
+version. These are:
+
+=over 4
+
+=item
+
+C<CAL-ADDRESS>
+
+=item
+
+C<DURATION>
+
+=item
+
+C<PERIOD>
+
+=item
+
+C<RECUR>
+
+=item
+
+C<TIME>
+
+=item
+
+C<UTC-OFFSET>
+
+=back
+
+As well, the C<GEO>, C<RESOURCES>, and C<CLASS> properties are yet to
+be implemented. Patches are welcome, as are work orders.
 
 =head1 AUTHOR
 
@@ -748,7 +792,6 @@ progress on your bug as I make changes.
 You can find documentation for this module with the perldoc command.
 
     perldoc Data::ICal::RDF
-
 
 You can also look for information at:
 

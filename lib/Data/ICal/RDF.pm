@@ -1,27 +1,44 @@
 package Data::ICal::RDF;
 
+# le pragma
 use 5.010;
 use strict;
 use warnings FATAL => 'all';
 
+# le moo and friends
 use Moo;
 use namespace::autoclean;
 
-use DateTime;
-use DateTime::Duration;
-use DateTime::Format::W3CDTF;
-use DateTime::Format::ICal;
-use DateTime::TimeZone::ICal;
-use Data::ICal;
-use MIME::Base64;
-use IO::Scalar;
-use Path::Class;
+# we do need these symbols
+use RDF::Trine   qw(statement iri literal);
+use UUID::Tiny   qw(UUID_V4);
 
-use RDF::Trine qw(statement iri literal);
-use UUID::Tiny qw(UUID_V4);
-use Scalar::Util ();
+# but don't screw around loading symbols on these
+use DateTime                 ();
+use DateTime::Duration       ();
+use DateTime::Format::W3CDTF ();
+use DateTime::Format::ICal   ();
+use DateTime::TimeZone::ICal ();
+use Data::ICal               ();
+use MIME::Base64             ();
+use IO::Scalar               ();
+use Path::Class              ();
+use Scalar::Util             ();
 
+# oh and our buddy:
 with 'Throwable';
+
+=head1 NAME
+
+Data::ICal::RDF - Turn iCal files into an RDF graph
+
+=head1 VERSION
+
+Version 0.01
+
+=cut
+
+our $VERSION = '0.01';
 
 # built-in ref types for our robust type checker
 my %CORE = map { $_ => 1 } qw(SCALAR ARRAY HASH CODE REF GLOB LVALUE
@@ -45,6 +62,8 @@ sub _is_really {
     }
 }
 
+# shorthands for UUID functions
+
 sub _uuid () {
     lc UUID::Tiny::create_uuid_as_string(UUID_V4);
 }
@@ -52,18 +71,6 @@ sub _uuid () {
 sub _uuid_urn () {
     'urn:uuid:' . _uuid;
 }
-
-=head1 NAME
-
-Data::ICal::RDF - Turn iCal files into an RDF graph
-
-=head1 VERSION
-
-Version 0.01
-
-=cut
-
-our $VERSION = '0.01';
 
 # this thing has been copied a million and one times
 my $NS = RDF::Trine::NamespaceMap->new({
@@ -77,7 +84,7 @@ my $NS = RDF::Trine::NamespaceMap->new({
     geo   => 'http://www.w3.org/2003/01/geo/wgs84_pos#',
 });
 
-# this will capture the segments of a v4 uuid
+# this will capture the segments of a properly-formed v4 uuid
 my $UUID4 = qr/([0-9A-Fa-f]{8})
                -?([0-9A-Fa-f]{4})
                -?(4[0-9A-Fa-f]{3})
@@ -165,7 +172,7 @@ sub _predicate_for {
 # this is a helper for BINARY values.
 sub _decode_property {
     my $prop = shift;
-    my $enc  = uc($p->{ENCODING} || 'BASE64');
+    my $enc  = uc($prop->parameters->{ENCODING} || 'BASE64');
     if ($enc eq 'BASE64') {
         # for some reason base64 is not built into Data::ICal.
         return MIME::Base64::decode($prop->value);
@@ -658,7 +665,7 @@ sub process_events {
 
         # don't forget to add the type
         $self->model->add_statement
-            (statement($s, $ns->rdf->type, $ns->ical->Vevent));
+            (statement($s, $NS->rdf->type, $NS->ical->Vevent));
 
         # generate a map of all valid properties and whether or not
         # they are permitted multiple values

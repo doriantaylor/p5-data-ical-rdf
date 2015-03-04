@@ -17,7 +17,7 @@ requires 'DateTime::TimeZone::ICal' => '0.01';
 requires 'Data::ICal'               => '0.21';
 requires 'MIME::Base64'             => '3.13';
 requires 'IO::Scalar'               => '2.110';
-requires 'Path::Class'              => '0.24':
+requires 'Path::Class'              => '0.24';
 requires 'UUID::Tiny'               => '1.04';
 
 build_requires 'Test::More';

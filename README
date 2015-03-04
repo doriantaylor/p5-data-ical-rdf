@@ -2,7 +2,7 @@ NAME
     Data::ICal::RDF - Turn iCal files into an RDF graph
 
 VERSION
-    Version 0.01
+    Version 0.02
 
 SYNOPSIS
         use Data::ICal::RDF;
@@ -29,8 +29,15 @@ SYNOPSIS
         # Now you can do whatever you like with the model.
         my $result = $context->model;
 
+DESCRIPTION
+    This module is a processor context for turning Data::ICal objects into
+    RDF data. By default it uses version 4 (i.e., random) UUIDs as subject
+    nodes.
+
 METHODS
-  new
+  new %PARAMS
+    Initialize the processor context.
+
     resolve_uid
         Supply a callback function to resolve the "UID" property of an iCal
         object. This function *must* return a RDF::Trine::Node::Resource or
@@ -45,6 +52,14 @@ METHODS
         "process_events", which is used by "process". If the function is not
         reliable for any reason, such as a failure to access hardware or
         network resources, those methods may "croak".
+
+        By default the processor will automatically convert iCal UIDs which
+        are V4 UUIDs into "urn:uuid:" URIs and use them as the subjects of
+        the resulting RDF statements. Furthermore, this is checked *before*
+        running this function to mitigate any database overhead (see
+        "no_uuids"). A V4 UUID URN is also generated as the iCal data's
+        subject if this function returns "undef". If you do *not* want to
+        use UUIDs, then this function must *always* return a valid value.
 
         Here is an example of a method in a fictitious class which generates
         a closure suitable to pass into the Data::ICal::RDF constructor:
@@ -134,6 +149,11 @@ METHODS
 
         This parameter is *optional*.
 
+    no_uuids
+        This is a flag to alter the short-circuiting behaviour of
+        "subject_for". When set, it will *not* attempt to return the result
+        of "is_uuid_uid" before running "resolve_uid".
+
   process $ICAL
     Process a Data::ICal object and put it into the object's internal model.
     Note that any "VTIMEZONE" objects found will *not* be inserted into the
@@ -156,6 +176,11 @@ METHODS
     Take an iCal "UID" property and return a suitable RDF node which can be
     used as a subject. This may call the "resolve_uid" callback and
     therefore may croak if it receives a bad value.
+
+  is_uuid_uid $UID
+    Returns a suitable "urn:uuid:" node if the iCal UID is also a valid
+    (version 4) UUID. Used by "subject_for" and available in the resolve_uid
+    and resolve_binary functions.
 
   model
     Retrieve the RDF::Trine::Model object embedded in the processor.

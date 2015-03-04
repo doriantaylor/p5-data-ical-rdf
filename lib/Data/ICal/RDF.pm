@@ -34,11 +34,11 @@ Data::ICal::RDF - Turn iCal files into an RDF graph
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # built-in ref types for our robust type checker
 my %CORE = map { $_ => 1 } qw(SCALAR ARRAY HASH CODE REF GLOB LVALUE
@@ -218,10 +218,10 @@ my %VALS = (
         }
 
         # turn the val into an IO object
-        $val = IO::Scalar->new(\$val);
+        my $io = IO::Scalar->new(\$val);
 
         # now try to resolve the attachment
-        my $o = eval { $self->resolve_binary->($self, $val, $type, $name) };
+        my $o = eval { $self->resolve_binary->($self, $io, $type, $name) };
         $self->throw("resolve_binary callback failed: $@") if $@;
         $self->throw('resolve_binary callback returned an invalid value')
               unless _is_really($o, 'RDF::Trine::Node');
@@ -266,7 +266,7 @@ my %VALS = (
 
         my $tzid = $prop->parameters->{TZID};
         if ($tzid and my $tz = $self->tz->{$tzid}) {
-            warn 'hooray that whole effort worked!';
+            #warn 'hooray that whole effort worked!';
             $dt->set_time_zone($tz);
         }
 
@@ -337,7 +337,7 @@ my %VALS = (
 
         my $uri = URI->new($prop->value)->canonical;
         my $p = $self->_predicate_for($prop);
-        $self->model->add_statement($s, $p, iri($uri->as_string));
+        $self->model->add_statement(statement($s, $p, iri($uri->as_string)));
 
         $uri;
     },
@@ -417,9 +417,17 @@ sub _process_property {
     # Now you can do whatever you like with the model.
     my $result = $context->model;
 
+=head1 DESCRIPTION
+
+This module is a processor context for turning L<Data::ICal> objects
+into RDF data. By default it uses version 4 (i.e., random) UUIDs as
+subject nodes.
+
 =head1 METHODS
 
-=head2 new
+=head2 new %PARAMS
+
+Initialize the processor context.
 
 =over 4
 
@@ -446,6 +454,14 @@ This function is used in L</subject_for>, which is used by
 L</process_events>, which is used by L</process>. If the function is
 not reliable for any reason, such as a failure to access hardware or
 network resources, those methods may C<croak>.
+
+By default the processor will automatically convert iCal UIDs which
+are V4 UUIDs into C<urn:uuid:> URIs and use them as the subjects of
+the resulting RDF statements. Furthermore, this is checked I<before>
+running this function to mitigate any database overhead (see
+L</no_uuids>). A V4 UUID URN is also generated as the iCal data's
+subject if this function returns C<undef>. If you do I<not> want to
+use UUIDs, then this function must I<always> return a valid value.
 
 Here is an example of a method in a fictitious class which generates a
 closure suitable to pass into the L<Data::ICal::RDF> constructor:
@@ -590,9 +606,20 @@ has tz => (
     default => sub { { } },
 );
 
+=item no_uuids
+
+This is a flag to alter the short-circuiting behaviour of
+L</subject_for>. When set, it will I<not> attempt to return the result
+of L</is_uuid_uid> before running L</resolve_uid>.
+
 =back
 
 =cut
+
+has no_uuids => (
+    is => 'rw',
+    default => sub { 0 },
+);
 
 has _subjects => (
     is => 'ro',
@@ -663,6 +690,10 @@ sub process_events {
         my $s = eval { $self->subject_for($uid->value) };
         $self->throw($@) if $@;
 
+        # don't forget to add the uid
+        $self->model->add_statement(statement(
+            $s, $NS->ical->uid, literal($uid->value, undef, $NS->xsd->string)));
+
         # don't forget to add the type
         $self->model->add_statement
             (statement($s, $NS->rdf->type, $NS->ical->Vevent));
@@ -709,11 +740,7 @@ therefore may croak if it receives a bad value.
 sub subject_for {
     my ($self, $uid) = @_;
 
-    # check to see if this is a V4 UUID
-    if (my @parts = ($uid =~ $UUID4)) {
-        # if it is, convert it into a resource node and return it
-        my $s = iri('urn:uuid:' . lc join '-', @parts);
-        #warn "$s is already a V4 UUID";
+    if (!$self->no_uuids and my $s = $self->is_uuid_uid($uid)) {
         return $s;
     }
 
@@ -725,21 +752,42 @@ sub subject_for {
 
     # call out to the callback
     if (my $s = eval { $self->resolve_uid->($self, $uid) }) {
-        $self->throw("resolve_uid callback failed: $@") if $@;
         $self->throw('resolve_uid callback returned an invalid value')
-              unless _is_really($s, 'RDF::Trine::Node');
+            unless _is_really($s, 'RDF::Trine::Node');
         $self->throw("Node $s returned from resolve_uid callback" .
-                        ' is not suitable as a subject')
-              unless ($s->is_resource or $s->is_blank);
-
+                             ' is not suitable as a subject')
+            unless ($s->is_resource or $s->is_blank);
         return $self->_subjects->{$uid} = $s;
     }
+    # explode if the eval failed
+    $self->throw("resolve_uid callback failed: $@") if $@;
+
 
     # if we can't find a cached entry or a mapping in the database,
     # then we create one from scratch (and cache it).
     my $s = iri(_uuid_urn);
     #warn "Generated $s for $uid";
     return $self->_subjects->{$uid} = $s;
+}
+
+=head2 is_uuid_uid $UID
+
+Returns a suitable C<urn:uuid:> node if the iCal UID is also a valid
+(version 4) UUID. Used by L</subject_for> and available in the
+L<resolve_uid> and L<resolve_binary> functions.
+
+=cut
+
+sub is_uuid_uid {
+    my ($self, $uid) = @_;
+
+    # check to see if this is a V4 UUID
+    if (my @parts = ($uid =~ $UUID4)) {
+        # if it is, convert it into a resource node and return it
+        my $s = iri('urn:uuid:' . lc join '-', @parts);
+        #warn "$s is already a V4 UUID";
+        return $s;
+    }
 }
 
 =head2 model

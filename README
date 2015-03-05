@@ -2,7 +2,7 @@ NAME
     Data::ICal::RDF - Turn iCal files into an RDF graph
 
 VERSION
-    Version 0.02
+    Version 0.03
 
 SYNOPSIS
         use Data::ICal::RDF;
@@ -152,7 +152,7 @@ METHODS
     no_uuids
         This is a flag to alter the short-circuiting behaviour of
         "subject_for". When set, it will *not* attempt to return the result
-        of "is_uuid_uid" before running "resolve_uid".
+        of "uid_is_uuid" before running "resolve_uid".
 
   process $ICAL
     Process a Data::ICal object and put it into the object's internal model.
@@ -177,7 +177,7 @@ METHODS
     used as a subject. This may call the "resolve_uid" callback and
     therefore may croak if it receives a bad value.
 
-  is_uuid_uid $UID
+  uuid_is_uid $UID
     Returns a suitable "urn:uuid:" node if the iCal UID is also a valid
     (version 4) UUID. Used by "subject_for" and available in the resolve_uid
     and resolve_binary functions.
@@ -186,8 +186,16 @@ METHODS
     Retrieve the RDF::Trine::Model object embedded in the processor.
 
 CAVEATS
-    A number of iCal datatype handlers are not implemented in this early
-    version. These are:
+    This module is *prototype-grade*, and may give you unexpected results.
+    It does not have a test suite to speak of, at least not until I can come
+    up with an adequate one. An exhaustive test suite to handle the vagaries
+    of the iCal format would likely take an order of magnitude more effort
+    than the module code itself. Nevertheless, I know it works because I'm
+    using it, so my "test suite" is production. I repeat, this is *not*
+    mature software. Patches welcome.
+
+    Furthermore, a number of iCal datatype handlers are not implemented in
+    this early version. These are:
 
     *   "CAL-ADDRESS"
 
@@ -200,6 +208,12 @@ CAVEATS
     *   "TIME"
 
     *   "UTC-OFFSET"
+
+    In particular, a lack of a handler for the "DURATION" type means events
+    that follow the "DTSTART"/"DURATION" form will be incomplete. In
+    practice this should not be a problem, as iCal, Outlook, etc. use
+    "DTEND". This is also in part a design issue, as to whether the
+    "DURATION" *property* should be normalized to "DTEND".
 
     As well, the "GEO", "RESOURCES", and "CLASS" properties are yet to be
     implemented. Patches are welcome, as are work orders.

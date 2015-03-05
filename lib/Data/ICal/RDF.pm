@@ -34,11 +34,11 @@ Data::ICal::RDF - Turn iCal files into an RDF graph
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 # built-in ref types for our robust type checker
 my %CORE = map { $_ => 1 } qw(SCALAR ARRAY HASH CODE REF GLOB LVALUE
@@ -265,6 +265,9 @@ my %VALS = (
         my $dt  = DateTime::Format::ICal->parse_datetime($prop->value);
 
         my $tzid = $prop->parameters->{TZID};
+        #warn "TZID: $tzid" if $tzid;
+        #require Data::Dumper;
+        #warn Data::Dumper::Dumper($self->tz);
         if ($tzid and my $tz = $self->tz->{$tzid}) {
             #warn 'hooray that whole effort worked!';
             $dt->set_time_zone($tz);
@@ -610,7 +613,7 @@ has tz => (
 
 This is a flag to alter the short-circuiting behaviour of
 L</subject_for>. When set, it will I<not> attempt to return the result
-of L</is_uuid_uid> before running L</resolve_uid>.
+of L</uid_is_uuid> before running L</resolve_uid>.
 
 =back
 
@@ -653,8 +656,12 @@ sub process {
         # snag all the time zones
         if ($t eq 'VTIMEZONE') {
             my $dtz = DateTime::TimeZone::ICal->from_ical_entry($entry);
-            $self->tz->{$dtz->name} = $dtz;
-            # XXX create a timezone object?
+            # woops, looks like DateTime::TimeZone aliasing messes
+            # with the name and causes time zones to be unfindable
+            my $id = $entry->property('TZID')->[0]->value;
+            $self->tz->{$id} = $dtz;
+
+            # XXX should we create a timezone object in rdf?
         }
         elsif ($t eq 'VEVENT') {
             push @events, $entry;
@@ -740,7 +747,7 @@ therefore may croak if it receives a bad value.
 sub subject_for {
     my ($self, $uid) = @_;
 
-    if (!$self->no_uuids and my $s = $self->is_uuid_uid($uid)) {
+    if (!$self->no_uuids and my $s = $self->uid_is_uuid($uid)) {
         return $s;
     }
 
@@ -770,7 +777,7 @@ sub subject_for {
     return $self->_subjects->{$uid} = $s;
 }
 
-=head2 is_uuid_uid $UID
+=head2 uuid_is_uid $UID
 
 Returns a suitable C<urn:uuid:> node if the iCal UID is also a valid
 (version 4) UUID. Used by L</subject_for> and available in the
@@ -778,7 +785,7 @@ L<resolve_uid> and L<resolve_binary> functions.
 
 =cut
 
-sub is_uuid_uid {
+sub uid_is_uuid {
     my ($self, $uid) = @_;
 
     # check to see if this is a V4 UUID
@@ -796,8 +803,16 @@ Retrieve the L<RDF::Trine::Model> object embedded in the processor.
 
 =head1 CAVEATS
 
-A number of iCal datatype handlers are not implemented in this early
-version. These are:
+This module is I<prototype-grade>, and may give you unexpected
+results. It does not have a test suite to speak of, at least not until
+I can come up with an adequate one. An exhaustive test suite to handle
+the vagaries of the iCal format would likely take an order of
+magnitude more effort than the module code itself. Nevertheless, I
+know it works because I'm using it, so my "test suite" is production.
+I repeat, this is I<not> mature software. Patches welcome.
+
+Furthermore, a number of iCal datatype handlers are not implemented in
+this early version. These are:
 
 =over 4
 
@@ -826,6 +841,12 @@ C<TIME>
 C<UTC-OFFSET>
 
 =back
+
+In particular, a lack of a handler for the C<DURATION> type means
+events that follow the C<DTSTART>/C<DURATION> form will be incomplete.
+In practice this should not be a problem, as iCal, Outlook, etc. use
+C<DTEND>. This is also in part a design issue, as to whether the
+C<DURATION> I<property> should be normalized to C<DTEND>.
 
 As well, the C<GEO>, C<RESOURCES>, and C<CLASS> properties are yet to
 be implemented. Patches are welcome, as are work orders.

@@ -26,7 +26,8 @@ use Path::Class              ();
 use Scalar::Util             ();
 
 # oh and our buddy:
-with 'Throwable';
+#with 'Throwable';
+use Carp ();
 
 =head1 NAME
 
@@ -34,11 +35,11 @@ Data::ICal::RDF - Turn iCal files into an RDF graph
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 # built-in ref types for our robust type checker
 my %CORE = map { $_ => 1 } qw(SCALAR ARRAY HASH CODE REF GLOB LVALUE
@@ -222,8 +223,8 @@ my %VALS = (
 
         # now try to resolve the attachment
         my $o = eval { $self->resolve_binary->($self, $io, $type, $name) };
-        $self->throw("resolve_binary callback failed: $@") if $@;
-        $self->throw('resolve_binary callback returned an invalid value')
+        Carp::croak("resolve_binary callback failed: $@") if $@;
+        Carp::croak('resolve_binary callback returned an invalid value')
               unless _is_really($o, 'RDF::Trine::Node');
 
         my $p = $self->_predicate_for($prop);
@@ -695,7 +696,7 @@ sub process_events {
 
         # fetch the appropriate subject UUID for the ical uid
         my $s = eval { $self->subject_for($uid->value) };
-        $self->throw($@) if $@;
+        Carp::croak($@) if $@;
 
         # don't forget to add the uid
         $self->model->add_statement(statement(
@@ -759,15 +760,15 @@ sub subject_for {
 
     # call out to the callback
     if (my $s = eval { $self->resolve_uid->($self, $uid) }) {
-        $self->throw('resolve_uid callback returned an invalid value')
+        Carp::croak('resolve_uid callback returned an invalid value')
             unless _is_really($s, 'RDF::Trine::Node');
-        $self->throw("Node $s returned from resolve_uid callback" .
+        Carp::croak("Node $s returned from resolve_uid callback" .
                              ' is not suitable as a subject')
             unless ($s->is_resource or $s->is_blank);
         return $self->_subjects->{$uid} = $s;
     }
     # explode if the eval failed
-    $self->throw("resolve_uid callback failed: $@") if $@;
+    Carp::croak("resolve_uid callback failed: $@") if $@;
 
 
     # if we can't find a cached entry or a mapping in the database,

@@ -2,7 +2,7 @@ NAME
     Data::ICal::RDF - Turn iCal files into an RDF graph
 
 VERSION
-    Version 0.03
+    Version 0.04
 
 SYNOPSIS
         use Data::ICal::RDF;
